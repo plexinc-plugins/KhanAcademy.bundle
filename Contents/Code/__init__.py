@@ -1,4 +1,3 @@
-from collections import deque
 import re
 
 ####################################################################################################
@@ -32,8 +31,7 @@ def Start():
     HTTP.CacheTime = 3600
 
 def VideoMainMenu():
-
-    dir = MediaContainer(viewGroup="List")
+    dir = MediaContainer(viewGroup = "List")
 
     dir.Append(Function(DirectoryItem(ByCategory,"Browse By Category...")))
     dir.Append(Function(DirectoryItem(AllCategories,"All Categories")))
@@ -41,45 +39,44 @@ def VideoMainMenu():
 
     return dir
 
-def ByCategory(sender, Menu = None):
+def ShowCategory(sender, category):
+  dir = MediaContainer(viewGroup = "List")
+  for video in HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//h2[text()='%s']//following-sibling::ol[1]/li/a" % category):
+    dir.Append(Function(VideoItem(PlayVideo,video.text),link = video.get("href")))
+  return dir
 
-    dir = MediaContainer(viewGroup="List")
-
-    if Menu == None:
-      Menu = HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//ul[@class='menu']")[0]
-    else:
-      Menu = HTML.ElementFromString(Menu)
-
-    queue = deque([Menu])
-    el = queue.popleft() 
-    queue.extend(el) 
-    while queue:
-      el = queue.popleft()
-      if (el.tag == 'li'):
-        queue.extend(el)
+def ByCategory(sender, parents=[]):
+    dir = MediaContainer(viewGroup = "List")
+    
+    # Top level menu.
+    menu = HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//nav[@class='css-menu']")[0]
+    
+    # Get the right list.
+    for index in parents:
+      menu = menu.xpath('ul/li')[index]
+      print "Got parent index", index, "of", menu
+    
+    # All all the items.
+    i = 0
+    for item in menu.xpath("ul/li"):
+      if item.text:
+        # Submenu.
+        title = item.text.strip()
+        dir.Append(Function(DirectoryItem(ByCategory, title), parents = parents + [i]))
       else:
-        if (el.tag == 'a'):
-          if (el.getnext() == None):
-            if el.get('href').find('#') >= 0:
-              dir.Append(Function(DirectoryItem(Submenu, el.text), category = String.Unquote(el.get('href').replace('#',''))))
-            else:
-              dir.Append(Function(DirectoryItem(Submenu, el.text), category = String.Unquote(el.get('href')),TestPrep = True))
-          else:
-            serialized = ''
-            els = el
-            for e in els.getnext().iterchildren():
-              serialized = serialized + (HTML.StringFromElement(e)).strip()
-            
-            dir.Append(Function(DirectoryItem(ByCategory, el.text), Menu = str(serialized)))
-
+        # Category.
+        category = item.xpath('a')[0]
+        title = category.text
+        dir.Append(Function(DirectoryItem(ShowCategory, title), category = title))
+      i += 1
+      
     return dir
-
 
 def AllCategories(sender):
 
     dir = MediaContainer(viewGroup="List")
 
-    for cat in HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//h2[@class='playlist-heading']"):
+    for cat in HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//h2[@class='playlist-heading ']"):
       dir.Append(Function(DirectoryItem(Submenu,cat.text),category = cat.text))
 
     return dir
