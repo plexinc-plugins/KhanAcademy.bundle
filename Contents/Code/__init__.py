@@ -119,16 +119,21 @@ def Submenu(sender, category, TestPrep = False):
 def GetYouTubeVideo(video_id):
   yt_page = HTTP.Request(YT_VIDEO_PAGE % (video_id), cacheTime=1).content
 
-  fmt_url_map = re.findall('"fmt_url_map".+?"([^"]+)', yt_page)[0]
+  fmt_url_map = re.findall('"url_encoded_fmt_stream_map".+?"([^"]+)', yt_page)[0]
   fmt_url_map = fmt_url_map.replace('\/', '/').split(',')
 
   fmts = []
   fmts_info = {}
 
   for f in fmt_url_map:
-    (fmt, url) = f.split('|')
-    fmts.append(fmt)
-    fmts_info[str(fmt)] = url
+    map = {}
+    params = f.split('\u0026')
+    for p in params:
+      (name, value) = p.split('=')
+      map[name] = value
+    quality = int(map['itag'])
+    fmts_info[quality] = String.Unquote(map['url'])
+    fmts.append(quality)
 
   index = YT_VIDEO_FORMATS.index(Prefs['yt_fmt'])
   if YT_FMT[index] in fmts:
@@ -141,8 +146,9 @@ def GetYouTubeVideo(video_id):
       else:
         fmt = 5
 
-  url = (fmts_info[str(fmt)]).decode('unicode_escape')
+  url = (fmts_info[int(fmt)]).decode('unicode_escape')
   return url
+
 
 def PlayVideo(sender,link):
     try:
