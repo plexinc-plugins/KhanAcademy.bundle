@@ -131,7 +131,7 @@ def GetYouTubeVideo(video_id):
     for p in params:
       (name, value) = p.split('=')
       map[name] = value
-    quality = int(map['itag'])
+    quality = str(map['itag'])
     fmts_info[quality] = String.Unquote(map['url'])
     fmts.append(quality)
 
@@ -146,7 +146,7 @@ def GetYouTubeVideo(video_id):
       else:
         fmt = 5
 
-  url = (fmts_info[int(fmt)]).decode('unicode_escape')
+  url = (fmts_info[str(fmt)]).decode('unicode_escape')
   return url
 
 
