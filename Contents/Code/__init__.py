@@ -7,153 +7,119 @@ NAME         = 'Khan Academy'
 ART          = 'art-default.jpg'
 ICON         = 'icon-default.png'
 
-BASE         = "http://www.khanacademy.org"
-
-# YouTube
-YT_VIDEO_PAGE    = 'http://www.youtube.com/watch?v=%s'
-YT_VIDEO_FORMATS = ['Standard', 'Medium', 'High', '720p', '1080p']
-YT_FMT           = [34, 18, 35, 22, 37]
+BASE         = 'http://www.khanacademy.org'
 
 ####################################################################################################
-
 def Start():
 
-    Plugin.AddPrefixHandler(VIDEO_PREFIX, VideoMainMenu, NAME, ICON, ART)
-
+    Plugin.AddPrefixHandler(VIDEO_PREFIX, MainMenu, NAME, ICON, ART)
     Plugin.AddViewGroup("InfoList", viewMode="InfoList", mediaType="items")
     Plugin.AddViewGroup("List", viewMode="List", mediaType="items")
 
-    MediaContainer.art = R(ART)
-    MediaContainer.title1 = NAME
-    DirectoryItem.thumb = R(ICON)
-    VideoItem.thumb = R(ICON)
+    ObjectContainer.title1 = NAME
+    ObjectContainer.view_group = 'List'
+    ObjectContainer.art = R(ART)
+      
+    DirectoryObject.thumb = R(ICON)
+    DirectoryObject.art = R(ART)
+    VideoClipObject.thumb = R(ICON)
+    VideoClipObject.art = R(ART)
 
     HTTP.CacheTime = 3600
 
-def VideoMainMenu():
+####################################################################################################
+def MainMenu():
+    oc = ObjectContainer()
 
-    dir = MediaContainer(viewGroup="List")
+    oc.add(DirectoryObject(key = Callback(ByCategory), title = 'Browse By Category...'))
+    oc.add(DirectoryObject(key = Callback(AllCategories), title = 'All Categories'))
+    oc.add(InputDirectoryObject(key = Callback(ParseSearchResults), title = 'Search...', prompt = 'Search for Videos'))
 
-    dir.Append(Function(DirectoryItem(ByCategory,"Browse By Category...")))
-    dir.Append(Function(DirectoryItem(AllCategories,"All Categories")))
-    dir.Append(Function(InputDirectoryItem(ParseSearchResults,"Search ...","Search",thumb=R("icon-search.png"))))
+    return oc
 
-    return dir
-
-def ByCategory(sender, MenuLevel = 1, title=''):
-
-    dir = MediaContainer(viewGroup="List",title2=title)
+####################################################################################################
+def ByCategory(level = 1, title = ''):
+    oc = ObjectContainer(title2 = title)
     
-    if MenuLevel>1:
-      parseString = '/ul/li' * (MenuLevel-1) +'[contains(.,"'+title+'")]/ul/li' 
+    if level > 1:
+      parse_string = '/ul/li' * (level - 1) + '[contains(.,"' + title + '")]/ul/li' 
     else:
-      parseString = '/ul/li' * MenuLevel
-  
-    Menu = HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//div[@id='browse-fixed']//nav[@class='css-menu']"+parseString)
+      parse_string = '/ul/li' * level
+
+    page = HTML.ElementFromURL('http://www.khanacademy.org/')
+    elements = page.xpath("//div[@id='browse-fixed']//nav[@class='css-menu']" + parse_string)
     
-    for el in Menu:
+    for el in elements:
       if (el.text == None):
         link = el.xpath('.//a')[0]
         if '#' in link.get('href'):
-          dir.Append(Function(DirectoryItem(Submenu, link.text.strip()), category = String.Unquote(link.get('href').replace('#',''))))
+          category = String.Unquote(link.get('href').replace('#',''))
+          oc.add(DirectoryObject(key = Callback(Submenu, category = category), title = link.text.strip()))
         else:
-          dir.Append(Function(DirectoryItem(Submenu, link.text.strip()), category = String.Unquote(link.get('href')),TestPrep = True))
+          category = String.Unquote(link.get('href'))
+          oc.add(DirectoryObject(key = Callback(Submenu, category = category, test_prep = True), title = link.text.strip()))
       else:
-        dir.Append(Function(DirectoryItem(ByCategory, el.text.strip()), MenuLevel = MenuLevel+1, title = el.text.strip()))
-    return dir
+        title = el.text.strip()
+        oc.add(DirectoryObject(key = Callback(ByCategory, title = title, level = level + 1), title = title))
 
+    return oc
 
-def AllCategories(sender):
+####################################################################################################
+def AllCategories():
+    oc = ObjectContainer()
 
-    dir = MediaContainer(viewGroup="List")
+    playlists = JSON.ObjectFromURL('http://www.khanacademy.org/api/playlists')
+    for playlist in playlists:
+      oc.add(DirectoryObject(
+        key = Callback(Submenu, category = playlist['title'].lower().replace(' ','-'), api_url = playlist['api_url']), 
+        title = playlist['title']))
 
-    for playlist in JSON.ObjectFromURL('http://www.khanacademy.org/api/playlists'):
-      dir.Append(Function(DirectoryItem(Submenu,playlist['title']),category = playlist['title'].lower().replace(' ','-')))
-    return dir
+    return oc
 
+####################################################################################################
+def ParseSearchResults(query = 'math'):
+    oc = ObjectContainer()
 
-def ParseSearchResults(sender, query=None):
-    cookies = HTTP.GetCookiesForURL('http://www.youtube.com/')
-    dir = MediaContainer(viewGroup="List", httpCookies=cookies)
-
-    results = HTML.ElementFromURL('http://www.khanacademy.org/search?page_search_query='+query).xpath("//section[@class='videos']//dt/a")
-
-    if results == []:
-        return MessageContainer('No Results','No video file could be found for the following query: '+query)
+    page = HTML.ElementFromURL('http://www.khanacademy.org/search?page_search_query=' + query)
+    results = page.xpath("//li[@class='videos']")
 
     for video in results:
-      dir.Append(Function(VideoItem(PlayVideo,video.text),link = video.get("href")))
+      url = BASE + video.xpath(".//a")[0].get('href')
+      title = video.xpath(".//span/text()")[0]
+      summary = video.xpath(".//p/text()")[0]
+      oc.add(VideoClipObject(url = url, title = title, summary = summary))
 
-    return dir
+    if len(oc) == 0:
+      return MessageContainer("No Results", 'No video file could be found for the following query: ' + query)
 
-def GetSummary(sender,link):
-    try:
-      summary = HTML.ElementFromURL(BASE+link).xpath("//nav[@class='breadcrumbs_nav']")[0].text
-    except:
-      summary = ""
-    return summary
+    return oc
 
-def Submenu(sender, category, TestPrep = False):
-    cookies = HTTP.GetCookiesForURL('http://www.youtube.com/')
-    dir = MediaContainer(viewGroup="List", httpCookies=cookies)
+####################################################################################################
+def Submenu(category, api_url = None, test_prep = False):
+    oc = ObjectContainer()
 
-    if TestPrep == False:
-      Log(category)
-      Category = HTML.ElementFromURL('http://www.khanacademy.org/').xpath("//div[@data-role='page' and @id='"+category+"']//h2")[0].text
-      Log(Category)
-      Playlist = "http://www.khanacademy.org/api/playlistvideos?playlist=%s"% String.Quote(Category)
-      videolist = JSON.ObjectFromURL(Playlist)
+    if test_prep == False:
+      if api_url == None:
+        page = HTML.ElementFromURL('http://www.khanacademy.org/')
+        playlist_category = page.xpath("//div[@data-role='page' and @id='" + category + "']//h2")[0].text
+        api_url = "http://www.khanacademy.org/api/playlistvideos?playlist=%s" % String.Quote(playlist_category)
       
-      for video in videolist:
-        dir.Append(Function(VideoItem(PlayVideo,video['title']),link = video['youtube_id']))
+      playlist = JSON.ObjectFromURL(api_url)
+      
+      for video in playlist:
+        oc.add(VideoClipObject(
+          url = video['youtube_url'],
+          title = video['title'],
+          summary = video['description'],
+          originally_available_at = Datetime.ParseDate(video['date_added'].split('T')[0]),
+          tags = [tag.strip() for tag in video['keywords'].split(',')]))
       
     else:
       if category == '/gmat':
-        dir.Append(Function(DirectoryItem(Submenu, "Data Sufficiency"), category = "GMAT Data Sufficiency"))
-        dir.Append(Function(DirectoryItem(Submenu, "Problem Solving"), category = "GMAT: Problem Solving"))
+        oc.add(DirectoryObject(key = Callback(Submenu, category = "GMAT Data Sufficiency"), title = "Data Sufficiency"))
+        oc.add(DirectoryObject(key = Callback(Submenu, category = "GMAT: Problem Solving"), title = "Problem Solving"))
       if category == '/sat':
-         dir.Append(Function(DirectoryItem(Submenu, "All SAT preperation courses"), category = "SAT Preparation"))
+        oc.add(DirectoryObject(key = Callback(Submenu, category = "SAT Preparation"), title = "All SAT preperation courses"))
                 
-    return dir
- 
-def GetYouTubeVideo(video_id):
-  yt_page = HTTP.Request(YT_VIDEO_PAGE % (video_id), cacheTime=1).content
+    return oc
 
-  fmt_url_map = re.findall('"url_encoded_fmt_stream_map".+?"([^"]+)', yt_page)[0]
-  fmt_url_map = fmt_url_map.replace('\/', '/').split(',')
-
-  fmts = []
-  fmts_info = {}
-
-  for f in fmt_url_map:
-    map = {}
-    params = f.split('\u0026')
-    for p in params:
-      (name, value) = p.split('=')
-      map[name] = value
-    quality = str(map['itag'])
-    fmts_info[quality] = String.Unquote(map['url'])
-    fmts.append(quality)
-
-  index = YT_VIDEO_FORMATS.index(Prefs['yt_fmt'])
-  if YT_FMT[index] in fmts:
-    fmt = YT_FMT[index]
-  else:
-    for i in reversed( range(0, index+1) ):
-      if str(YT_FMT[i]) in fmts:
-        fmt = YT_FMT[i]
-        break
-      else:
-        fmt = 5
-
-  url = (fmts_info[str(fmt)]).decode('unicode_escape')
-  return url
-
-
-def PlayVideo(sender,link):
-    try:
-      url = GetYouTubeVideo(link)
-    except:
-      url = "http://www.archive.org/download/KhanAcademy_"+link[link.find("playlist=")+9:].replace("%20",'')+"/"+link[link.find("/video/")+7:link.find("?")]+".flv"
-
-    return Redirect(url)
