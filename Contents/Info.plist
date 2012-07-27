@@ -6,8 +6,8 @@
 	<string>com.plexapp.plugins.khanacademy</string>
 	<key>PlexAudioCodec</key>
 	<array>
-		<string>MP3</string>
 		<string>AAC</string>
+		<string>MP3</string>
 	</array>
 	<key>PlexClientPlatformExclusions</key>
 	<string>Roku</string>
@@ -17,15 +17,13 @@
 	<string>2</string>
 	<key>PlexMediaContainer</key>
 	<array>
-		<string>FLV</string>
 		<string>MP4</string>
+		<string>FLV</string>
 	</array>
-	<key>PlexPluginConsoleLogging</key>
-	<string>1</string>
 	<key>PlexVideoCodec</key>
 	<array>
-		<string>H.263</string>
 		<string>H.264</string>
+		<string>H.263</string>
 	</array>
 </dict>
 </plist>
