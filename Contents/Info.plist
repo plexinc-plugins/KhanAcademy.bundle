@@ -4,26 +4,9 @@
 <dict>
 	<key>CFBundleIdentifier</key>
 	<string>com.plexapp.plugins.khanacademy</string>
-	<key>PlexAudioCodec</key>
-	<array>
-		<string>AAC</string>
-		<string>MP3</string>
-	</array>
-	<key>PlexClientPlatformExclusions</key>
-	<string>Roku</string>
 	<key>PlexClientPlatforms</key>
 	<string>*</string>
 	<key>PlexFrameworkVersion</key>
 	<string>2</string>
-	<key>PlexMediaContainer</key>
-	<array>
-		<string>MP4</string>
-		<string>FLV</string>
-	</array>
-	<key>PlexVideoCodec</key>
-	<array>
-		<string>H.264</string>
-		<string>H.263</string>
-	</array>
 </dict>
 </plist>
