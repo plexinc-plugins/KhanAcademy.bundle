@@ -1,5 +1,7 @@
 NAME = 'Khan Academy'
 BASE = 'http://www.khanacademy.org'
+TOPIC = 'http://www.khanacademy.org/api/v1/topic/%s'
+SEARCH = 'http://www.khanacademy.org/search?page_search_query='
 
 ####################################################################################################
 def Start():
@@ -20,34 +22,69 @@ def MainMenu():
     return oc
 
 ####################################################################################################
-@route('/video/khanacademy/category', level=int)
-def ByCategory(level = 1, title = ''):
+# This fucntion gets the main category headings from the main page
+@route('/video/khanacademy/bycategory')
+def ByCategory():
 
-    oc = ObjectContainer(title2 = title)
+    oc = ObjectContainer()
+    page = HTML.ElementFromURL(BASE)
+    catlist = page.xpath('//ul/li[@class="subjects-column-first"]/h2')
 
-    if level > 1:
-      parse_string = '/ul/li' * (level - 1) + '[contains(.,"' + title + '")]/ul/li' 
-    else:
-      parse_string = '/ul/li' * level
-
-    page = HTML.ElementFromURL('http://www.khanacademy.org/')
-    elements = page.xpath("//div[@id='browse-fixed']//nav[@class='css-menu']" + parse_string)
-
-    for el in elements:
-      if (el.text == None):
-        link = el.xpath('.//a')[0]
-        if '#' in link.get('href'):
-          category = String.Unquote(link.get('href').replace('#',''))
-          oc.add(DirectoryObject(key = Callback(Submenu, category = category), title = link.text.strip()))
-        else:
-          category = String.Unquote(link.get('href'))
-          oc.add(DirectoryObject(key = Callback(Submenu, category = category, test_prep = True), title = link.text.strip()))
-      else:
-        title = el.text.strip()
-        oc.add(DirectoryObject(key = Callback(ByCategory, title = title, level = level + 1), title = title))
+    for item in catlist:
+        title = item.xpath('./a//text()')[0]
+        topic_name = item.xpath('./@class')[0]
+        topic_name = topic_name.replace('domain-header ', '')
+        oc.add(DirectoryObject(
+            key = Callback(Topics, title=title, topic_name=topic_name), 
+            title = title))
 
     return oc
 
+####################################################################################################
+# This function either pulls the topic or video API
+# The playlist API no longer works for these categories so you have to use the topic API
+# There can be several layers of subtopics and the '/videos' extension will not work unless there are no more subtopic for that section 
+# It would be nice if there were some way of knowing whether or not the next level will contain more topics or videos but there is not
+# TRIED USING THE BROWSER FIELD WHICH SEEMED TO BE FALSE THE LEVEL BEFORE VIDEOS BUT THIS DOES NOT WORK WITH ALL
+# They do not seem to mix videos and topics, so for now I check the first entry to see if it is of the kind Topic
+@route('/video/khanacademy/topics')
+def Topics(title, topic_name):
+
+    oc = ObjectContainer(title2=title)
+    playlists = JSON.ObjectFromURL(TOPIC %topic_name)
+    render_type = playlists['render_type']
+    Log('the value of render_type is %s' %render_type)
+
+
+    if render_type != 'Tutorial':
+        for child in playlists['children']:
+            child_type = child['kind']
+            if child_type == 'Topic':
+                title = child['title']
+                child_topic = child['id']
+                # Found one that has a id but gives an error and the url for that one is 'http://www.khanacademy.org/None'
+                # So this is a check to make sure there is a web page and videos for this subject
+                child_url = child['url']
+                if child_topic not in child_url:
+                    continue
+                oc.add(DirectoryObject(
+                    key = Callback(Topics, topic_name = child_topic, title = title), 
+                    title = title))
+            else:
+                pass
+    else:
+        playlists = JSON.ObjectFromURL(TOPIC %topic_name + '/videos')
+
+        for video in playlists:
+            oc.add(VideoClipObject(
+                url = video['url'],
+                title = video['title'],
+                summary = video['description'],
+                duration = video['duration'] * 1000,
+                originally_available_at = Datetime.ParseDate(video['date_added'].split('Z')[0])
+            ))
+
+    return oc
 ####################################################################################################
 @route('/video/khanacademy/allcategories')
 def AllCategories():
@@ -56,64 +93,51 @@ def AllCategories():
     playlists = JSON.ObjectFromURL('http://www.khanacademy.org/api/playlists')
 
     for playlist in playlists:
-      oc.add(DirectoryObject(
-        key = Callback(Submenu, category = playlist['title'].lower().replace(' ','-'), api_url = playlist['api_url']), 
-        title = playlist['title']))
+        oc.add(DirectoryObject(
+            key = Callback(Submenu, category = playlist['title'].lower().replace(' ','-'), api_url = playlist['api_url']), 
+            title = playlist['title']))
 
     return oc
 
+####################################################################################################
+@route('/video/khanacademy/submenu')
+def Submenu(category, api_url = ''):
+
+    oc = ObjectContainer()
+
+    playlist = JSON.ObjectFromURL(api_url)
+
+    for video in playlist:
+        oc.add(VideoClipObject(
+            url = video['youtube_url'],
+            title = video['title'],
+            summary = video['description'],
+            originally_available_at = Datetime.ParseDate(video['date_added'].split('T')[0]),
+            tags = [tag.strip() for tag in video['keywords'].split(',')]
+        ))
+
+    return oc
 ####################################################################################################
 @route('/video/khanacademy/search')
 def ParseSearchResults(query = 'math'):
 
     oc = ObjectContainer()
-    page = HTML.ElementFromURL('http://www.khanacademy.org/search?page_search_query=' + query)
-    results = page.xpath("//li[@class='videos']")
+    page = HTML.ElementFromURL(SEARCH %query)
+    results = page.xpath("//section[@class='video-results']/div")
 
     for video in results:
-      url = BASE + video.xpath(".//a")[0].get('href')
-      title = video.xpath(".//span/text()")[0]
-      summary = video.xpath(".//p/text()")[0]
+        url = BASE + video.xpath(".//a")[0].get('href')
+        if 'javascript:void(0)' in url:
+            continue
+        title = video.xpath(".//span/text()")[0]
 
-      oc.add(VideoClipObject(
-        url = url,
-        title = title,
-        summary = summary
-      ))
-
-    if len(oc) < 1:
-      return ObjectContainer(header="No Results", message='No video file could be found for the following query: ' + query)
-
-    return oc
-
-####################################################################################################
-@route('/video/khanacademy/submenu', test_prep=bool)
-def Submenu(category, api_url = '', test_prep = False):
-
-    oc = ObjectContainer()
-
-    if test_prep == False:
-      if api_url == '':
-        page = HTML.ElementFromURL('http://www.khanacademy.org/')
-        playlist_category = page.xpath("//div[@data-role='page' and @id='" + category + "']//h2")[0].text
-        api_url = "http://www.khanacademy.org/api/playlistvideos?playlist=%s" % String.Quote(playlist_category)
-
-      playlist = JSON.ObjectFromURL(api_url)
-
-      for video in playlist:
         oc.add(VideoClipObject(
-          url = video['youtube_url'],
-          title = video['title'],
-          summary = video['description'],
-          originally_available_at = Datetime.ParseDate(video['date_added'].split('T')[0]),
-          tags = [tag.strip() for tag in video['keywords'].split(',')]
+            url = url,
+            title = title
         ))
 
-    else:
-      if category == '/gmat':
-        oc.add(DirectoryObject(key = Callback(Submenu, category = "GMAT Data Sufficiency"), title = "Data Sufficiency"))
-        oc.add(DirectoryObject(key = Callback(Submenu, category = "GMAT: Problem Solving"), title = "Problem Solving"))
-      if category == '/sat':
-        oc.add(DirectoryObject(key = Callback(Submenu, category = "SAT Preparation"), title = "All SAT preperation courses"))
+    if len(oc) < 1:
+        return ObjectContainer(header="No Results", message='No video file could be found for the following query: ' + query)
 
     return oc
+
