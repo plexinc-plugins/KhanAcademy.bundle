@@ -1,5 +1,5 @@
 NAME = 'Khan Academy'
-BASE = 'http://www.khanacademy.org'
+BASE = 'http://www.khanacademy.org/library'
 TOPIC = 'http://www.khanacademy.org/api/v1/topic/%s'
 SEARCH = 'http://www.khanacademy.org/search?page_search_query='
 
@@ -17,7 +17,7 @@ def MainMenu():
 
     oc.add(DirectoryObject(key = Callback(ByCategory), title = 'Browse By Category...'))
     oc.add(DirectoryObject(key = Callback(AllCategories), title = 'All Categories'))
-    oc.add(InputDirectoryObject(key = Callback(ParseSearchResults), title = 'Search...', prompt = 'Search for Videos'))
+#    oc.add(InputDirectoryObject(key = Callback(ParseSearchResults), title = 'Search...', prompt = 'Search for Videos'))
 
     return oc
 
