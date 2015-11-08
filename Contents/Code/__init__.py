@@ -15,30 +15,28 @@ def MainMenu():
 
     oc = ObjectContainer()
 
-    oc.add(DirectoryObject(key = Callback(ByCategory), title = 'Browse By Category...'))
+    oc.add(DirectoryObject(key = Callback(ByCategory), title = 'Browse By Category'))
     oc.add(DirectoryObject(key = Callback(AllCategories), title = 'All Categories'))
-#    oc.add(InputDirectoryObject(key = Callback(ParseSearchResults), title = 'Search...', prompt = 'Search for Videos'))
 
     return oc
 
 ####################################################################################################
-# This fucntion gets the main category headings from the main page
+# This function gets the main category headings from the main page
 @route('/video/khanacademy/bycategory')
 def ByCategory():
 
-    oc = ObjectContainer()
-    page = HTML.ElementFromURL(BASE)
-    catlist = page.xpath('//ul/li[@class="subjects-column-first"]/h2')
+	oc = ObjectContainer()
+	page = HTML.ElementFromURL(BASE)
+	showList = page.xpath('//span[@class="span12"]/ul/li/h2')
 
-    for item in catlist:
-        title = item.xpath('./a//text()')[0]
-        topic_name = item.xpath('./@class')[0]
-        topic_name = topic_name.replace('domain-header ', '')
-        oc.add(DirectoryObject(
-            key = Callback(Topics, title=title, topic_name=topic_name), 
-            title = title))
+	for s in showList:
+		
+		topic_name = s.xpath('@class')[0].replace('domain-header ', '')
+		show = s.xpath('a/text()')[0]
 
-    return oc
+		oc.add(DirectoryObject(key = Callback(Topics, topic_name=topic_name, title=show), title = show))
+
+	return oc
 
 ####################################################################################################
 # This function either pulls the topic or video API
@@ -117,27 +115,3 @@ def Submenu(category, api_url = ''):
         ))
 
     return oc
-####################################################################################################
-@route('/video/khanacademy/search')
-def ParseSearchResults(query = 'math'):
-
-    oc = ObjectContainer()
-    page = HTML.ElementFromURL(SEARCH %query)
-    results = page.xpath("//section[@class='video-results']/div")
-
-    for video in results:
-        url = BASE + video.xpath(".//a")[0].get('href')
-        if 'javascript:void(0)' in url:
-            continue
-        title = video.xpath(".//span/text()")[0]
-
-        oc.add(VideoClipObject(
-            url = url,
-            title = title
-        ))
-
-    if len(oc) < 1:
-        return ObjectContainer(header="No Results", message='No video file could be found for the following query: ' + query)
-
-    return oc
-
